@@ -2060,7 +2060,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
               <div className="space-y-1.5">
                 <h4 className="font-mono text-white uppercase font-bold text-[11px] border-b border-white/5 pb-0.5">🌀 Galactic Anomalies & Space Stations</h4>
-                <p><strong>Orbit Docking:</strong> Approach any orbiting planet or orbital base station. Slow down inside the approach vector, and press <kbd className="bg-neutral-800 px-1 font-mono text-white border border-white/10">SPACEBAR</kbd> to engage automatic docking sequences.</p>
+                <p><strong>Orbit Docking:</strong> Approach any orbiting planet or orbital base station. Slow down inside the approach vector, and press <kbd className="bg-neutral-800 px-1 font-mono text-white border border-white/10">E</kbd> to engage automatic docking sequences.</p>
                 <p><strong>Singularity Black Holes:</strong> Highly intense cores that pull you inside event horizons. Crossing event horizons will trigger a cinematic quantum space dilation bypass warp, ejecting you across galaxies!</p>
                 <p><strong>Wormhole Toruses:</strong> Spin gateways that transport you instantly to other sectors! Fly through their centers to activate jumps.</p>
               </div>
@@ -2816,7 +2816,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                       </div>
                       <div className="space-y-1.5 font-mono pt-2 border-t border-white/5">
                         <h4 className="text-white uppercase font-bold text-[10px] border-b border-white/5 pb-1 text-blue-400">🌀 INTERSTELLAR ANOMALIES</h4>
-                        <p><strong>DOCKING PORTS:</strong> Approach any orbital planet outposts or space ports inside 1200u distance. Slow down and press <kbd className="bg-neutral-800 px-1 border border-white/15 text-white rounded-sm">SPACEBAR</kbd> to safely auto-dock!</p>
+                        <p><strong>DOCKING PORTS:</strong> Approach any orbital planet outposts or space ports inside 1200u distance. Slow down and press <kbd className="bg-neutral-800 px-1 border border-white/15 text-white rounded-sm">E</kbd> to safely auto-dock!</p>
                         <p><strong>BLACK HOLES:</strong> Extremely heavy stellar cores. Fly through event horizons to activate emergency quantum jumps across galaxy clusters.</p>
                       </div>
                     </div>

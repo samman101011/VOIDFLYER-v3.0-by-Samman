@@ -788,8 +788,8 @@ export const SpaceGame: React.FC = () => {
         }
       }
 
-      // Space bar landing/takeoff triggers
-      if (e.key === " " || e.code === "Space") {
+      // E key landing/takeoff triggers
+      if (e.key === "e" || e.key === "E" || e.code === "KeyE") {
         e.preventDefault();
         if (gameStateRef.current === "Playing" && !statsRef.current.isLanded && statsRef.current.currentPlanetId && statsRef.current.landingProgress === 0) {
           setStats((prev) => ({ ...prev, landingProgress: 0.01 }));
@@ -2162,22 +2162,7 @@ export const SpaceGame: React.FC = () => {
       audioEngine.playLaser();
       setLaserCooldown(30);
 
-      // Render cyan cylinder laser beam lines
-      const beamGeom = new THREE.CylinderGeometry(0.8, 0.8, 1500, 8);
-      beamGeom.rotateX(Math.PI / 2);
-      const beamMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending });
-      const beamMesh = new THREE.Mesh(beamGeom, beamMat);
-      
-      beamMesh.position.copy(shipGroup.position).addScaledVector(direction, 750);
-      beamMesh.quaternion.copy(shipGroup.quaternion);
-      scene.add(beamMesh);
-
-      setTimeout(() => {
-        scene.remove(beamMesh);
-        beamGeom.dispose();
-        beamMat.dispose();
-      }, 90);
-
+      // 1. Calculate hit enemy FIRST within a 15-degree cone (0.26 radians) of flight direction
       let hitEnemy: typeof enemies[0] | null = null;
       let minHitDist = 2000;
 
@@ -2186,7 +2171,7 @@ export const SpaceGame: React.FC = () => {
         const dist = toEnemy.length();
         if (dist < 2000) {
           const angle = direction.angleTo(toEnemy.normalize());
-          if (angle < 0.2) {
+          if (angle < 0.26) { // 15-degree cone
             if (dist < minHitDist) {
               minHitDist = dist;
               hitEnemy = enemy;
@@ -2194,6 +2179,31 @@ export const SpaceGame: React.FC = () => {
           }
         }
       });
+
+      // 2. Render dynamic cyan cylinder laser beam lines
+      const beamLength = hitEnemy ? minHitDist : 1500;
+      const beamGeom = new THREE.CylinderGeometry(0.8, 0.8, beamLength, 8);
+      beamGeom.rotateX(Math.PI / 2);
+      const beamMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending });
+      const beamMesh = new THREE.Mesh(beamGeom, beamMat);
+      
+      if (hitEnemy) {
+        // Bend laser line visually directly onto target enemy contact
+        const midPoint = new THREE.Vector3().addVectors(shipGroup.position, hitEnemy.position).multiplyScalar(0.5);
+        beamMesh.position.copy(midPoint);
+        beamMesh.lookAt(hitEnemy.position);
+      } else {
+        // Laser fires straight along nose forward direction
+        beamMesh.position.copy(shipGroup.position).addScaledVector(direction, 750);
+        beamMesh.quaternion.copy(shipGroup.quaternion);
+      }
+      scene.add(beamMesh);
+
+      setTimeout(() => {
+        scene.remove(beamMesh);
+        beamGeom.dispose();
+        beamMat.dispose();
+      }, 90);
 
       if (hitEnemy) {
         const laserLvl = statsRef.current.upgrades.lasers || 0;
@@ -2415,8 +2425,8 @@ export const SpaceGame: React.FC = () => {
         const flightMode = settingsRef.current.flightMode || "arcade";
         
         // Boost/accel feel punchier with exponential lerp factoring (framerate-independent)
-        const accelFactor = flightMode === "arcade" ? (1 - Math.exp(-4.5 * delta)) : (1 - Math.exp(-2.0 * delta));
-        const boostFactor = flightMode === "arcade" ? (1 - Math.exp(-6.0 * delta)) : (1 - Math.exp(-2.5 * delta));
+        const accelFactor = flightMode === "arcade" ? (1 - Math.exp(-6.5 * delta)) : (1 - Math.exp(-3.5 * delta));
+        const boostFactor = flightMode === "arcade" ? (1 - Math.exp(-8.0 * delta)) : (1 - Math.exp(-4.5 * delta));
 
         if (isBoosting && statsRef.current.fuel > 12) {
           velocity.z = THREE.MathUtils.lerp(velocity.z, -statsRef.current.boostSpeed, boostFactor);
@@ -2506,23 +2516,68 @@ export const SpaceGame: React.FC = () => {
         const sensitivity = settingsRef.current.touchSensitivity || 1.0;
         const mSensitivity = settingsRef.current.mouseSensitivity || 1.0;
 
-        // Target Steer inputs (A/D: Roll, W/S: Pitch, Q/E: Yaw)
+        // Target Steer inputs
         let targetRoll = 0;
         let targetPitch = 0;
         let targetYaw = 0;
 
-        if (keysRef.current["a"] || keysRef.current["arrowleft"]) targetRoll = 2.0 * steerMult;
-        if (keysRef.current["d"] || keysRef.current["arrowright"]) targetRoll = -2.0 * steerMult;
+        // Beginner friendly: A/D (and Left/Right Arrow) maps directly to steering (Yaw) with automatic banking (Roll)!
+        if (keysRef.current["a"] || keysRef.current["arrowleft"]) {
+          targetYaw = 2.15 * steerMult;
+          targetRoll = 1.95 * steerMult; // beautiful banking roll
+        }
+        if (keysRef.current["d"] || keysRef.current["arrowright"]) {
+          targetYaw = -2.15 * steerMult;
+          targetRoll = -1.95 * steerMult; // beautiful banking roll
+        }
 
-        if (keysRef.current["w"] || keysRef.current["arrowup"]) targetPitch = -1.5 * steerMult;
-        if (keysRef.current["s"] || keysRef.current["arrowdown"]) targetPitch = 1.5 * steerMult;
+        if (keysRef.current["w"] || keysRef.current["arrowup"]) targetPitch = -2.1 * steerMult;
+        if (keysRef.current["s"] || keysRef.current["arrowdown"]) targetPitch = 2.1 * steerMult;
 
-        if (keysRef.current["q"]) targetYaw = 1.3 * steerMult;
-        if (keysRef.current["e"]) targetYaw = -1.3 * steerMult;
+        // Q/E can still be used for manual, pure high-speed barrel rolls and spins
+        if (keysRef.current["q"]) targetRoll = 2.6 * steerMult;
+        if (keysRef.current["e"]) targetRoll = -2.6 * steerMult;
 
-        // Mouse assist
-        if (Math.abs(mouseRef.current.x) > 0.05) targetYaw += -mouseRef.current.x * 1.4 * steerMult * mSensitivity;
-        if (Math.abs(mouseRef.current.y) > 0.05) targetPitch += mouseRef.current.y * 1.4 * steerMult * mSensitivity;
+        // Mouse assist (Disable entirely on mobile to prevent stuck cursor spinning bugs)
+        if (!isMobile) {
+          if (Math.abs(mouseRef.current.x) > 0.05) targetYaw += -mouseRef.current.x * 1.85 * steerMult * mSensitivity;
+          if (Math.abs(mouseRef.current.y) > 0.05) targetPitch += mouseRef.current.y * 1.85 * steerMult * mSensitivity;
+        }
+
+        // --- AUTO-AIM / GUIDANCE LIGHT LOCK ---
+        // Adjusts yaw/pitch slightly if an enemy is close and within a 30-degree cone (0.52 radians)
+        let aimAssistYaw = 0;
+        let aimAssistPitch = 0;
+        let nearestEnemyForAssist = null;
+        let minAssistDist = 3500;
+        const assistConeRadians = 30 * Math.PI / 180; // 30 degrees
+
+        enemies.forEach((enemy) => {
+          const toEnemy = new THREE.Vector3().subVectors(enemy.position, shipGroup.position);
+          const dist = toEnemy.length();
+          if (dist < minAssistDist) {
+            const toEnemyNorm = toEnemy.clone().normalize();
+            const angle = direction.angleTo(toEnemyNorm);
+            if (angle < assistConeRadians) {
+              minAssistDist = dist;
+              nearestEnemyForAssist = enemy;
+            }
+          }
+        });
+
+        if (nearestEnemyForAssist) {
+          const toEnemy = new THREE.Vector3().subVectors((nearestEnemyForAssist as any).position, shipGroup.position).normalize();
+          // Project to local spaceship space to calculate precise corrections
+          const localTarget = toEnemy.applyQuaternion(shipGroup.quaternion.clone().invert());
+          
+          // Apply strong satisfying correction pull toward the enemy core
+          const assistStrength = 2.35;
+          aimAssistYaw = -localTarget.x * assistStrength;
+          aimAssistPitch = localTarget.y * assistStrength;
+        }
+
+        targetYaw += aimAssistYaw;
+        targetPitch += aimAssistPitch;
 
         // Mobile touch joystick inputs (additive or direct override)
         if (isMobile) {
@@ -2547,7 +2602,7 @@ export const SpaceGame: React.FC = () => {
         }
 
         // Apply smooth exponential decay interpolation for responsive, silky-smooth steering feel
-        const lerpFactor = 1 - Math.exp(-12 * delta); // 12Hz decay rate for buttery action
+        const lerpFactor = 1 - Math.exp(-25 * delta); // 25Hz decay rate for buttery action
         smoothRoll = THREE.MathUtils.lerp(smoothRoll, targetRoll, lerpFactor);
         smoothPitch = THREE.MathUtils.lerp(smoothPitch, targetPitch, lerpFactor);
         smoothYaw = THREE.MathUtils.lerp(smoothYaw, targetYaw, lerpFactor);
@@ -2669,14 +2724,14 @@ export const SpaceGame: React.FC = () => {
             // Re-use currentPlanetId = "station" to trigger docking prompts on HUD
             if (statsRef.current.currentPlanetId !== "station") {
               setStats((prev) => ({ ...prev, currentPlanetId: "station" }));
-              addLog("STATION APPROACH: Orbital outpost approach vector locked. Press SPACEBAR to dock.", "warning");
+              addLog("STATION APPROACH: Orbital outpost approach vector locked. Press E to dock.", "warning");
             }
-            if (keysRef.current[" "] || keysRef.current["space"]) {
+            if (keysRef.current["e"] || keysRef.current["keye"]) {
               setStats((prev) => ({ ...prev, isLanded: true, speed: 0, fuel: prev.maxFuel }));
               audioEngine.setMusicZone("station");
               addLog("DOCKING COUPLING ENGAGED: Energy Core instantly restored to 100%! Welcome to Star Outpost Flight Services.", "success");
-              keysRef.current[" "] = false;
-              keysRef.current["space"] = false;
+              keysRef.current["e"] = false;
+              keysRef.current["keye"] = false;
             }
           } else if (statsRef.current.currentPlanetId === "station") {
             setStats((prev) => ({ ...prev, currentPlanetId: null }));
@@ -2744,7 +2799,7 @@ export const SpaceGame: React.FC = () => {
           if (planetObj) {
             if (statsRef.current.currentPlanetId !== nearestPlanetId && statsRef.current.currentPlanetId !== "station") {
               setStats((prev) => ({ ...prev, currentPlanetId: nearestPlanetId }));
-              addLog(`Gravity well locked: ${planetObj.config.name}. Press SPACEBAR to initiate base docking!`, "warning");
+              addLog(`Gravity well locked: ${planetObj.config.name}. Press E to initiate base docking!`, "warning");
             }
 
             // Discover Planet
@@ -2937,40 +2992,75 @@ export const SpaceGame: React.FC = () => {
 
           const distToPlayer = enemy.position.distanceTo(shipGroup.position);
           if (distToPlayer < 2400) {
-            // Aggro Chasing Mode
+            // Aggro Chasing Mode with smooth orientation steering slerp
+            if (!(enemy as any).currentQuat) {
+              (enemy as any).currentQuat = enemy.mesh.quaternion.clone();
+            }
+
+            const prevQuat = (enemy as any).currentQuat.clone();
             enemy.mesh.lookAt(shipGroup.position);
-            const chaseDir = new THREE.Vector3().subVectors(shipGroup.position, enemy.position).normalize();
-            
-            const chaseSpeed = enemy.classType === "Scout" ? 125 : enemy.classType === "Fighter" ? 90 : 55;
-            enemy.position.addScaledVector(chaseDir, chaseSpeed * delta);
+            const targetQuat = enemy.mesh.quaternion.clone();
+            enemy.mesh.quaternion.copy(prevQuat); // restore to interpolate
+
+            // Smoothly slerp towards looking directly at player
+            const turnRate = enemy.classType === "Scout" ? 3.2 : enemy.classType === "Fighter" ? 1.85 : 0.75;
+            (enemy as any).currentQuat.slerp(targetQuat, turnRate * delta);
+            enemy.mesh.quaternion.copy((enemy as any).currentQuat);
+
+            // Fly forward along their actual local nose heading (creates spectacular cinematic overshooting on quick turns!)
+            const enemyForward = new THREE.Vector3(0, 0, -1).applyQuaternion((enemy as any).currentQuat);
+            const chaseSpeed = enemy.classType === "Scout" ? 112 : enemy.classType === "Fighter" ? 82 : 48;
+            enemy.position.addScaledVector(enemyForward, chaseSpeed * delta);
 
             // Enemy Shooting weapon cooldowns
             enemy.fireCooldown -= delta;
             if (enemy.fireCooldown <= 0 && distToPlayer < 1800) {
-              enemy.fireCooldown = enemy.classType === "Scout" ? 1.4 : enemy.classType === "Fighter" ? 1.0 : 1.8;
+              enemy.fireCooldown = enemy.classType === "Scout" ? 1.45 : enemy.classType === "Fighter" ? 1.15 : 1.95;
               
-              // Shoot glowing red cylinder laser at player
-              const enemyLaserGeom = new THREE.CylinderGeometry(0.7, 0.7, distToPlayer, 8);
-              enemyLaserGeom.rotateX(Math.PI / 2);
-              const enemyLaserMat = new THREE.MeshBasicMaterial({ color: 0xff003c, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending });
-              const enemyLaserMesh = new THREE.Mesh(enemyLaserGeom, enemyLaserMat);
-              
-              // Position laser line between enemy and ship
-              const midPoint = new THREE.Vector3().addVectors(enemy.position, shipGroup.position).multiplyScalar(0.5);
-              enemyLaserMesh.position.copy(midPoint);
-              enemyLaserMesh.lookAt(shipGroup.position);
-              scene.add(enemyLaserMesh);
+              // Verify if enemy is actually pointing within a reasonable 15-degree cone (0.26 radians) of the player before hitting
+              const toPlayerNorm = new THREE.Vector3().subVectors(shipGroup.position, enemy.position).normalize();
+              const angleToPlayer = enemyForward.angleTo(toPlayerNorm);
 
-              setTimeout(() => {
-                scene.remove(enemyLaserMesh);
-                enemyLaserGeom.dispose();
-                enemyLaserMat.dispose();
-              }, 110);
+              if (angleToPlayer < 0.26) {
+                // Point-blank HIT! Draw direct laser line to player
+                const enemyLaserGeom = new THREE.CylinderGeometry(0.7, 0.7, distToPlayer, 8);
+                enemyLaserGeom.rotateX(Math.PI / 2);
+                const enemyLaserMat = new THREE.MeshBasicMaterial({ color: 0xff003c, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending });
+                const enemyLaserMesh = new THREE.Mesh(enemyLaserGeom, enemyLaserMat);
+                
+                const midPoint = new THREE.Vector3().addVectors(enemy.position, shipGroup.position).multiplyScalar(0.5);
+                enemyLaserMesh.position.copy(midPoint);
+                enemyLaserMesh.lookAt(shipGroup.position);
+                scene.add(enemyLaserMesh);
 
-              // Deal damage to player
-              const dmg = enemy.classType === "Scout" ? 7 : enemy.classType === "Fighter" ? 13 : 25;
-              takeDamage(dmg);
-              addLog(`THREAT INCOMING: Starship hit by ${enemy.name} laser blast!`, "danger");
+                setTimeout(() => {
+                  scene.remove(enemyLaserMesh);
+                  enemyLaserGeom.dispose();
+                  enemyLaserMat.dispose();
+                }, 110);
+
+                // Deal damage to player
+                const dmg = enemy.classType === "Scout" ? 7 : enemy.classType === "Fighter" ? 13 : 25;
+                takeDamage(dmg);
+                addLog(`THREAT INCOMING: Starship hit by ${enemy.name} laser blast!`, "danger");
+              } else {
+                // Cinematic MISS! Enemy fires red lasers forward along their current heading into empty space!
+                const laserRange = 1600;
+                const enemyLaserGeom = new THREE.CylinderGeometry(0.6, 0.6, laserRange, 8);
+                enemyLaserGeom.rotateX(Math.PI / 2);
+                const enemyLaserMat = new THREE.MeshBasicMaterial({ color: 0xff003c, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending });
+                const enemyLaserMesh = new THREE.Mesh(enemyLaserGeom, enemyLaserMat);
+                
+                enemyLaserMesh.position.copy(enemy.position).addScaledVector(enemyForward, laserRange / 2);
+                enemyLaserMesh.quaternion.copy(enemy.mesh.quaternion);
+                scene.add(enemyLaserMesh);
+
+                setTimeout(() => {
+                  scene.remove(enemyLaserMesh);
+                  enemyLaserGeom.dispose();
+                  enemyLaserMat.dispose();
+                }, 110);
+              }
             }
           } else {
             // standard orbital patrol loop
@@ -2985,6 +3075,9 @@ export const SpaceGame: React.FC = () => {
               const orbitTangent = new THREE.Vector3(-Math.sin(enemy.patrolAngle), 0, Math.cos(enemy.patrolAngle));
               const lookTarget = new THREE.Vector3().copy(enemy.position).add(orbitTangent);
               enemy.mesh.lookAt(lookTarget);
+              
+              // Sync currentQuat with standard patrol orientation so there are no sudden snaps when aggroing
+              (enemy as any).currentQuat = enemy.mesh.quaternion.clone();
             }
           }
 
@@ -3522,8 +3615,12 @@ export const SpaceGame: React.FC = () => {
               <button
                 onClick={() => {
                   audioEngine.playClick();
-                  keysRef.current[" "] = true;
-                  setTimeout(() => { keysRef.current[" "] = false; }, 50);
+                  keysRef.current["e"] = true;
+                  keysRef.current["keye"] = true;
+                  setTimeout(() => { 
+                    keysRef.current["e"] = false; 
+                    keysRef.current["keye"] = false; 
+                  }, 50);
                 }}
                 className="px-6 py-3 bg-green-500 hover:bg-green-400 active:bg-green-600 text-neutral-950 font-black text-xs tracking-wider uppercase cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.45)] animate-pulse rounded-sm active:scale-95 transition-transform"
               >
@@ -3544,50 +3641,70 @@ export const SpaceGame: React.FC = () => {
           </div>
 
           {/* Bottom joysticks and action buttons */}
-          <div className="w-full flex justify-between items-end">
-            {/* Left Virtual Joystick */}
-            <div className="pointer-events-auto pb-4 pl-4">
+          <div className="w-full flex justify-between items-end px-4 md:px-8 pb-4">
+            {/* Left Zone: Joystick + Speed controls */}
+            <div className="flex items-end gap-6 pointer-events-auto pl-4">
               <VirtualJoystick
                 title="STEER // FLIGHT"
-                size={settings.joystickSize}
+                size={settings.joystickSize || 108}
                 onMove={(x, y) => {
                   leftJoystickRef.current = { x, y };
                 }}
               />
+              <div className="flex flex-col gap-3">
+                {/* Boost Button */}
+                <button
+                  onTouchStart={() => {
+                    touchBoostRef.current = true;
+                  }}
+                  onTouchEnd={() => {
+                    touchBoostRef.current = false;
+                  }}
+                  onMouseDown={() => {
+                    touchBoostRef.current = true;
+                  }}
+                  onMouseUp={() => {
+                    touchBoostRef.current = false;
+                  }}
+                  className="w-16 h-16 rounded-full border border-orange-500/50 bg-gradient-to-br from-orange-600/30 to-red-600/30 active:from-orange-500 active:to-red-600 flex flex-col items-center justify-center text-[10px] text-orange-200 font-extrabold uppercase shadow-[0_0_20px_rgba(249,115,22,0.25)] cursor-pointer select-none transition-all duration-100 active:scale-95 border-b-2 border-b-orange-500/80"
+                >
+                  <span className="text-[8px] opacity-75">BOOST</span>
+                  <span className="text-xs font-black">THRUST</span>
+                </button>
+
+                {/* Brake Button */}
+                <button
+                  onTouchStart={() => {
+                    touchBrakeRef.current = true;
+                  }}
+                  onTouchEnd={() => {
+                    touchBrakeRef.current = false;
+                  }}
+                  onMouseDown={() => {
+                    touchBrakeRef.current = true;
+                  }}
+                  onMouseUp={() => {
+                    touchBrakeRef.current = false;
+                  }}
+                  className="w-16 h-16 rounded-full border border-cyan-500/30 bg-gradient-to-br from-cyan-950/40 to-slate-900/40 active:from-cyan-500/40 active:to-slate-800/40 flex flex-col items-center justify-center text-[10px] text-cyan-300 font-extrabold uppercase shadow-[0_0_15px_rgba(6,182,212,0.15)] cursor-pointer select-none transition-all duration-100 active:scale-95 border-b-2 border-b-cyan-500/50"
+                >
+                  <span className="text-[8px] opacity-75">REVERSE</span>
+                  <span className="text-xs font-black">BRAKE</span>
+                </button>
+              </div>
             </div>
 
-            {/* Center column: Boost and Brake buttons */}
-            <div className="flex flex-col gap-3 pointer-events-auto pb-4">
-              {/* Boost Button */}
-              <button
-                onTouchStart={() => {
-                  touchBoostRef.current = true;
+            {/* Right Zone: Roll joystick + Firing control */}
+            <div className="flex items-end gap-6 pointer-events-auto pr-4">
+              <VirtualJoystick
+                title="SPIN // ROLL"
+                size={settings.joystickSize || 108}
+                onMove={(x, y) => {
+                  rightJoystickRef.current = { x, y };
                 }}
-                onTouchEnd={() => {
-                  touchBoostRef.current = false;
-                }}
-                className="w-16 h-16 rounded-full border border-orange-500/30 bg-orange-950/25 active:bg-orange-500/30 flex items-center justify-center text-[10px] text-orange-400 font-bold uppercase shadow-[0_0_15px_rgba(249,115,22,0.15)] cursor-pointer select-none"
-              >
-                BOOST
-              </button>
-
-              {/* Brake Button */}
-              <button
-                onTouchStart={() => {
-                  touchBrakeRef.current = true;
-                }}
-                onTouchEnd={() => {
-                  touchBrakeRef.current = false;
-                }}
-                className="w-16 h-16 rounded-full border border-neutral-500/30 bg-neutral-950/40 active:bg-neutral-500/30 flex items-center justify-center text-[10px] text-white font-bold uppercase cursor-pointer select-none"
-              >
-                BRAKE
-              </button>
-            </div>
-
-            {/* Right column: Shoot button and Right joystick */}
-            <div className="flex items-end gap-6 pointer-events-auto pb-4 pr-4">
-              {/* Shoot trigger button */}
+              />
+              
+              {/* Massive firing trigger */}
               <button
                 onTouchStart={() => {
                   touchShootRef.current = true;
@@ -3595,19 +3712,24 @@ export const SpaceGame: React.FC = () => {
                 onTouchEnd={() => {
                   touchShootRef.current = false;
                 }}
-                className="w-20 h-20 rounded-full border border-red-500/40 bg-red-950/30 active:bg-red-500/40 active:shadow-[0_0_25px_rgba(239,68,68,0.5)] flex items-center justify-center text-xs text-red-400 font-black tracking-widest uppercase cursor-pointer select-none"
-              >
-                FIRE
-              </button>
-
-              {/* Right Virtual Joystick */}
-              <VirtualJoystick
-                title="SPIN // ROLL"
-                size={settings.joystickSize}
-                onMove={(x, y) => {
-                  rightJoystickRef.current = { x, y };
+                onMouseDown={() => {
+                  touchShootRef.current = true;
                 }}
-              />
+                onMouseUp={() => {
+                  touchShootRef.current = false;
+                }}
+                className="w-24 h-24 rounded-full border-2 border-red-500/60 bg-gradient-to-br from-red-600/30 to-rose-700/30 active:from-red-600 active:to-rose-700 flex flex-col items-center justify-center text-red-100 font-black tracking-widest uppercase cursor-pointer select-none transition-all duration-100 active:scale-90 shadow-[0_0_35px_rgba(239,68,68,0.35)] active:shadow-[0_0_55px_rgba(239,68,68,0.75)] border-b-4 border-b-red-500/90 relative overflow-hidden group"
+              >
+                {/* Decorative inner targeting overlay */}
+                <div className="absolute inset-2 rounded-full border border-dashed border-red-500/20 pointer-events-none group-active:border-red-400/40" />
+                <div className="absolute w-1 h-3 bg-red-400/30 top-1.5 left-1/2 -translate-x-1/2" />
+                <div className="absolute w-1 h-3 bg-red-400/30 bottom-1.5 left-1/2 -translate-x-1/2" />
+                <div className="absolute h-1 w-3 bg-red-400/30 left-1.5 top-1/2 -translate-y-1/2" />
+                <div className="absolute h-1 w-3 bg-red-400/30 right-1.5 top-1/2 -translate-y-1/2" />
+                
+                <span className="text-[8px] text-red-400 font-bold tracking-normal z-10">WEAPONS</span>
+                <span className="text-sm font-extrabold tracking-wider z-10">FIRE</span>
+              </button>
             </div>
           </div>
         </div>

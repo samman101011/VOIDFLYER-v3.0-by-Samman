@@ -60,8 +60,17 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove, title,
       e.preventDefault();
     };
 
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+    };
+  }, [isDragging]);
+
+  useEffect(() => {
+    if (!isDragging || touchIdRef.current === null) return;
+
     const onTouchMove = (e: TouchEvent) => {
-      if (!isDragging || touchIdRef.current === null) return;
       for (let i = 0; i < e.touches.length; i++) {
         if (e.touches[i].identifier === touchIdRef.current) {
           handleMove(e.touches[i].clientX, e.touches[i].clientY);
@@ -72,7 +81,6 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove, title,
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      if (!isDragging || touchIdRef.current === null) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         if (e.changedTouches[i].identifier === touchIdRef.current) {
           handleEnd();
@@ -82,16 +90,14 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove, title,
       }
     };
 
-    el.addEventListener("touchstart", onTouchStart, { passive: false });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", onTouchEnd, { passive: false });
-    el.addEventListener("touchcancel", onTouchEnd, { passive: false });
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onTouchEnd, { passive: false });
+    window.addEventListener("touchcancel", onTouchEnd, { passive: false });
 
     return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", onTouchEnd);
-      el.removeEventListener("touchcancel", onTouchEnd);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("touchcancel", onTouchEnd);
     };
   }, [isDragging]);
 
