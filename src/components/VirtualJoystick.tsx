@@ -3,9 +3,10 @@ import React, { useRef, useState, useEffect } from "react";
 interface VirtualJoystickProps {
   onMove: (x: number, y: number) => void;
   title: string;
+  size?: number;
 }
 
-export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove, title }) => {
+export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove, title, size = 96 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -25,7 +26,7 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove, title 
     const deltaX = clientX - centerX;
     const deltaY = clientY - centerY;
 
-    const maxRadius = 45; // max drag radius in pixels
+    const maxRadius = size / 2 - 8; // max drag radius proportional to size
     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
     
     let targetX = deltaX;
@@ -98,7 +99,8 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove, title 
     <div className="flex flex-col items-center gap-1.5 select-none touch-none">
       <div
         ref={containerRef}
-        className="w-24 h-24 rounded-full border border-blue-500/25 bg-blue-950/20 backdrop-blur-md flex items-center justify-center relative shadow-[inset_0_0_20px_rgba(59,130,246,0.1)]"
+        className="rounded-full border border-blue-500/25 bg-blue-950/20 backdrop-blur-md flex items-center justify-center relative shadow-[inset_0_0_20px_rgba(59,130,246,0.1)]"
+        style={{ width: `${size}px`, height: `${size}px` }}
         id={`joystick_${title.replace(/\s+/g, "_").toLowerCase()}`}
       >
         {/* Outer concentric visual ring */}

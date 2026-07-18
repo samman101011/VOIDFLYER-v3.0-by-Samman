@@ -142,6 +142,10 @@ export interface GameSettings {
   vsync?: boolean;
   flightMode?: "arcade" | "simulation";
   postProcessing: boolean;
+  uiScale?: number;
+  touchSensitivity?: number;
+  joystickSize?: number;
+  colorblindMode?: boolean;
 }
 
 export type GameDifficulty = "easy" | "medium" | "hard";

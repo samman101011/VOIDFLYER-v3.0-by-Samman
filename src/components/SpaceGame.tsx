@@ -27,6 +27,7 @@ export const SpaceGame: React.FC = () => {
   const [hullColor, setHullColor] = useState<string>("#38bdf8");
 
   const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [isPortrait, setIsPortrait] = useState<boolean>(false);
   const [mobileWeapon, setMobileWeapon] = useState<"laser" | "missile">("laser");
   const mobileWeaponRef = useRef<"laser" | "missile">("laser");
   mobileWeaponRef.current = mobileWeapon;
@@ -45,6 +46,37 @@ export const SpaceGame: React.FC = () => {
     const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent) || 
       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     setIsMobile(isMobileDevice);
+
+    const checkOrientation = () => {
+      if (isMobileDevice) {
+        setIsPortrait(window.innerHeight > window.innerWidth);
+      } else {
+        setIsPortrait(false);
+      }
+    };
+
+    checkOrientation();
+
+    // Auto-lock landscape orientation when possible on Android/mobile browsers
+    if (isMobileDevice) {
+      try {
+        if (screen.orientation && (screen.orientation as any).lock) {
+          (screen.orientation as any).lock("landscape").catch((err: any) => {
+            console.log("Landscape lock requires full screen or is unsupported:", err);
+          });
+        }
+      } catch (err) {
+        console.warn("Screen orientation error:", err);
+      }
+    }
+
+    window.addEventListener("resize", checkOrientation);
+    window.addEventListener("orientationchange", checkOrientation);
+
+    return () => {
+      window.removeEventListener("resize", checkOrientation);
+      window.removeEventListener("orientationchange", checkOrientation);
+    };
   }, []);
   
   // Tactical logs rolling feed
@@ -694,6 +726,10 @@ export const SpaceGame: React.FC = () => {
     vsync: true,
     flightMode: "arcade",
     postProcessing: true,
+    uiScale: 1.0,
+    touchSensitivity: 1.0,
+    joystickSize: 96,
+    colorblindMode: false,
   });
 
   // Track live coordinates of active enemies for 2D radar display
@@ -1652,6 +1688,18 @@ export const SpaceGame: React.FC = () => {
     const cabinMesh = new THREE.Mesh(cabinGeom, hullMat);
     shipGroup.add(cabinMesh);
 
+    // Strong outline / rim light mesh using BackSide material for extreme visibility
+    const outlineMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      side: THREE.BackSide,
+      transparent: true,
+      opacity: 0.45
+    });
+
+    const cabinOutline = new THREE.Mesh(cabinGeom, outlineMat);
+    cabinOutline.scale.set(1.05, 1.05, 1.05);
+    shipGroup.add(cabinOutline);
+
     // Windscreens
     const glassGeom = new THREE.SphereGeometry(5.2, 16, 16);
     glassGeom.scale(1, 0.7, 1.8);
@@ -1667,11 +1715,24 @@ export const SpaceGame: React.FC = () => {
     leftWingMesh.rotation.y = -0.12;
     shipGroup.add(leftWingMesh);
 
+    const leftWingOutline = new THREE.Mesh(leftWingGeom, outlineMat);
+    leftWingOutline.position.set(-10, -0.6, 2.5);
+    leftWingOutline.rotation.z = 0.12;
+    leftWingOutline.rotation.y = -0.12;
+    leftWingOutline.scale.set(1.04, 1.04, 1.04);
+    shipGroup.add(leftWingOutline);
+
     const rightWingMesh = leftWingMesh.clone();
     rightWingMesh.position.x = 10;
     rightWingMesh.rotation.z = -0.12;
     rightWingMesh.rotation.y = 0.12;
     shipGroup.add(rightWingMesh);
+
+    const rightWingOutline = leftWingOutline.clone();
+    rightWingOutline.position.x = 10;
+    rightWingOutline.rotation.z = -0.12;
+    rightWingOutline.rotation.y = 0.12;
+    shipGroup.add(rightWingOutline);
 
     // Exhaust thrust tubes
     const tubeL = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 9, 8), engineMat);
@@ -1683,18 +1744,23 @@ export const SpaceGame: React.FC = () => {
     tubeR.position.x = 4;
     shipGroup.add(tubeR);
 
-    // Glowing flame basic cones
-    const exhaustGeom = new THREE.ConeGeometry(1.8, 7, 8);
+    // Glowing flame basic cones - cyan blue neon
+    const exhaustGeom = new THREE.ConeGeometry(2.4, 10, 8);
     exhaustGeom.rotateX(-Math.PI / 2);
-    const exhaustMat = new THREE.MeshBasicMaterial({ color: 0xff4d00, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
+    const exhaustMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending });
     
     const flameL = new THREE.Mesh(exhaustGeom, exhaustMat);
     flameL.position.set(-4, -0.8, 16.5);
     shipGroup.add(flameL);
 
-    const flameR = flameL.clone();
-    flameR.position.x = 4;
+    const flameR = new THREE.Mesh(exhaustGeom, exhaustMat);
+    flameR.position.set(4, -0.8, 16.5);
     shipGroup.add(flameR);
+
+    // Engine point light
+    const engineLight = new THREE.PointLight(0x0ea5e9, 6.0, 50, 0.4);
+    engineLight.position.set(0, -0.8, 13);
+    shipGroup.add(engineLight);
 
     // Set loaded or start position of spaceship
     shipGroup.position.set(playerPos[0], playerPos[1], playerPos[2]);
@@ -1723,7 +1789,17 @@ export const SpaceGame: React.FC = () => {
     const createEnemyVisualMesh = (classType: "Scout" | "Fighter" | "Heavy Cruiser", coreColor: number) => {
       const group = new THREE.Group();
       const bodyMat = new THREE.MeshStandardMaterial({ color: coreColor, metalness: 0.85, roughness: 0.22 });
-      const engineMat = new THREE.MeshBasicMaterial({ color: 0xff003c });
+      
+      // Let's make a super vibrant, emissive red engine material for the enemy
+      const engineMat = new THREE.MeshBasicMaterial({ color: 0xff1e56, transparent: true, opacity: 0.95 });
+
+      // Create a gorgeous glowing red outline material using BackSide
+      const redOutlineMat = new THREE.MeshBasicMaterial({
+        color: 0xff1e56,
+        side: THREE.BackSide,
+        transparent: true,
+        opacity: 0.45
+      });
 
       if (classType === "Scout") {
         // Swift Scout Needleship
@@ -1731,17 +1807,38 @@ export const SpaceGame: React.FC = () => {
         body.rotateX(Math.PI / 2);
         group.add(body);
 
+        const bodyOutline = new THREE.Mesh(new THREE.ConeGeometry(5, 17, 4), redOutlineMat);
+        bodyOutline.rotateX(Math.PI / 2);
+        bodyOutline.scale.set(1.08, 1.08, 1.08);
+        group.add(bodyOutline);
+
         const wingL = new THREE.Mesh(new THREE.BoxGeometry(10, 0.6, 4.5), bodyMat);
         wingL.position.set(-6, -0.2, 1);
         group.add(wingL);
         const wingR = wingL.clone();
         wingR.position.x = 6;
         group.add(wingR);
+
+        // Glowing Engine Flame
+        const flameGeom = new THREE.ConeGeometry(1.6, 7, 8);
+        flameGeom.rotateX(-Math.PI / 2);
+        const eFlame = new THREE.Mesh(flameGeom, new THREE.MeshBasicMaterial({ color: 0xff003c, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending }));
+        eFlame.position.set(0, 0, 9.5);
+        group.add(eFlame);
+
+        // Scale up silhouette
+        group.scale.set(1.22, 1.22, 1.22);
+
       } else if (classType === "Fighter") {
         // Standard Strike Fighter
         const cabin = new THREE.Mesh(new THREE.ConeGeometry(6, 21, 6), bodyMat);
         cabin.rotateX(Math.PI / 2);
         group.add(cabin);
+
+        const cabinOutline = new THREE.Mesh(new THREE.ConeGeometry(6, 21, 6), redOutlineMat);
+        cabinOutline.rotateX(Math.PI / 2);
+        cabinOutline.scale.set(1.07, 1.07, 1.07);
+        group.add(cabinOutline);
 
         const wingL = new THREE.Mesh(new THREE.BoxGeometry(15, 0.8, 7.5), bodyMat);
         wingL.position.set(-8.5, 0, 1.5);
@@ -1756,10 +1853,25 @@ export const SpaceGame: React.FC = () => {
         jet.rotateX(Math.PI / 2);
         jet.position.set(0, 0, 10);
         group.add(jet);
+
+        // Glowing Engine Flame
+        const flameGeom = new THREE.ConeGeometry(2.2, 9, 8);
+        flameGeom.rotateX(-Math.PI / 2);
+        const eFlame = new THREE.Mesh(flameGeom, new THREE.MeshBasicMaterial({ color: 0xff003c, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending }));
+        eFlame.position.set(0, 0, 14.5);
+        group.add(eFlame);
+
+        // Scale up silhouette
+        group.scale.set(1.25, 1.25, 1.25);
+
       } else {
         // Large Heavy Dreadnought Cruiser
         const body = new THREE.Mesh(new THREE.BoxGeometry(18, 14, 48), bodyMat);
         group.add(body);
+
+        const bodyOutline = new THREE.Mesh(new THREE.BoxGeometry(18, 14, 48), redOutlineMat);
+        bodyOutline.scale.set(1.05, 1.05, 1.05);
+        group.add(bodyOutline);
 
         const dome = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 16), new THREE.MeshStandardMaterial({ color: 0xe11d48, metalness: 0.9 }));
         dome.position.set(0, 9, 3);
@@ -1779,7 +1891,28 @@ export const SpaceGame: React.FC = () => {
         const jetR = jetL.clone();
         jetR.position.x = 6;
         group.add(jetR);
+
+        // Glowing Engine Flames
+        const flameGeom = new THREE.ConeGeometry(3.0, 13, 8);
+        flameGeom.rotateX(-Math.PI / 2);
+        
+        const eFlameL = new THREE.Mesh(flameGeom, new THREE.MeshBasicMaterial({ color: 0xff003c, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending }));
+        eFlameL.position.set(-6, 0, 31);
+        group.add(eFlameL);
+
+        const eFlameR = eFlameL.clone();
+        eFlameR.position.x = 6;
+        group.add(eFlameR);
+
+        // Scale up silhouette
+        group.scale.set(1.3, 1.3, 1.3);
       }
+
+      // Add a PointLight inside each enemy to cast a red engine glow
+      const redLight = new THREE.PointLight(0xff1e56, 4.5, 45, 0.4);
+      redLight.position.set(0, 0, 12);
+      group.add(redLight);
+
       return group;
     };
 
@@ -2138,6 +2271,18 @@ export const SpaceGame: React.FC = () => {
     };
     window.addEventListener("resize", handleResize);
 
+    // Active engine trail particles
+    const activeTrails: {
+      mesh: THREE.Mesh;
+      lifetime: number;
+      maxLifetime: number;
+    }[] = [];
+
+    // Smoothed steering values for responsive, buttery-smooth flight controls
+    let smoothRoll = 0;
+    let smoothPitch = 0;
+    let smoothYaw = 0;
+
     // 17. MAIN ANIMATION LOOP
     let lastTime = performance.now();
     let frameCount = 0;
@@ -2268,11 +2413,13 @@ export const SpaceGame: React.FC = () => {
         let energyChange = coreRegen * delta;
         let isBoosting = keysRef.current["shift"] || keysRef.current["left_shift"] || touchBoostRef.current;
         const flightMode = settingsRef.current.flightMode || "arcade";
-        const accelSpeed = flightMode === "arcade" ? 0.08 : 0.02;
-        const boostSpeedLerp = flightMode === "arcade" ? 0.10 : 0.04;
+        
+        // Boost/accel feel punchier with exponential lerp factoring (framerate-independent)
+        const accelFactor = flightMode === "arcade" ? (1 - Math.exp(-4.5 * delta)) : (1 - Math.exp(-2.0 * delta));
+        const boostFactor = flightMode === "arcade" ? (1 - Math.exp(-6.0 * delta)) : (1 - Math.exp(-2.5 * delta));
 
         if (isBoosting && statsRef.current.fuel > 12) {
-          velocity.z = THREE.MathUtils.lerp(velocity.z, -statsRef.current.boostSpeed, boostSpeedLerp);
+          velocity.z = THREE.MathUtils.lerp(velocity.z, -statsRef.current.boostSpeed, boostFactor);
           energyChange -= 26.0 * delta; // consumes 26 EC/sec, net depletion depending on upgrades
           statsRef.current.isBoosting = true;
           audioEngine.setBoosting(true);
@@ -2282,12 +2429,56 @@ export const SpaceGame: React.FC = () => {
         } else {
           const isBraking = keysRef.current["control"] || keysRef.current["left_control"] || touchBrakeRef.current;
           const speedZ = isBraking ? -15 : -statsRef.current.maxSpeed;
-          velocity.z = THREE.MathUtils.lerp(velocity.z, speedZ, accelSpeed);
+          velocity.z = THREE.MathUtils.lerp(velocity.z, speedZ, accelFactor);
           statsRef.current.isBoosting = false;
           audioEngine.setBoosting(false);
 
           flameL.scale.set(1.0, 1.0, 1.0);
           flameR.scale.set(1.0, 1.0, 1.0);
+        }
+
+        // Spawn colored engine trail particles
+        if (Math.random() < 0.45) {
+          const trailGeom = new THREE.SphereGeometry(1.2, 6, 6);
+          const trailMat = new THREE.MeshBasicMaterial({
+            color: 0x38bdf8,
+            transparent: true,
+            opacity: 0.7,
+            blending: THREE.AdditiveBlending
+          });
+
+          const spawnTrailAt = (pos: THREE.Vector3) => {
+            const tMesh = new THREE.Mesh(trailGeom, trailMat);
+            tMesh.position.copy(pos);
+            scene.add(tMesh);
+            activeTrails.push({
+              mesh: tMesh,
+              lifetime: 0.55,
+              maxLifetime: 0.55
+            });
+          };
+
+          const posL = new THREE.Vector3(-4, -0.8, 14).applyQuaternion(shipGroup.quaternion).add(shipGroup.position);
+          const posR = new THREE.Vector3(4, -0.8, 14).applyQuaternion(shipGroup.quaternion).add(shipGroup.position);
+
+          spawnTrailAt(posL);
+          spawnTrailAt(posR);
+        }
+
+        // Update active engine trail particles
+        for (let tIdx = activeTrails.length - 1; tIdx >= 0; tIdx--) {
+          const trail = activeTrails[tIdx];
+          trail.lifetime -= delta;
+          if (trail.lifetime <= 0) {
+            scene.remove(trail.mesh);
+            trail.mesh.geometry.dispose();
+            (trail.mesh.material as any).dispose();
+            activeTrails.splice(tIdx, 1);
+          } else {
+            const pct = trail.lifetime / trail.maxLifetime;
+            trail.mesh.scale.set(pct, pct, pct);
+            (trail.mesh.material as any).opacity = pct * 0.75;
+          }
         }
 
         // Active Shield Recharge powered by the Energy Core
@@ -2310,37 +2501,39 @@ export const SpaceGame: React.FC = () => {
           };
         });
 
-        // Steering rates multiplier
+        // Steering rates multiplier and sensitivity adjustments
         const steerMult = flightMode === "arcade" ? 1.85 : 1.0;
+        const sensitivity = settingsRef.current.touchSensitivity || 1.0;
+        const mSensitivity = settingsRef.current.mouseSensitivity || 1.0;
 
-        // Steer inputs (A/D: Roll, W/S: Pitch, Q/E: Yaw)
-        let rollVal = 0;
-        let pitchVal = 0;
-        let yawVal = 0;
+        // Target Steer inputs (A/D: Roll, W/S: Pitch, Q/E: Yaw)
+        let targetRoll = 0;
+        let targetPitch = 0;
+        let targetYaw = 0;
 
-        if (keysRef.current["a"] || keysRef.current["arrowleft"]) rollVal = 2.0 * delta * steerMult;
-        if (keysRef.current["d"] || keysRef.current["arrowright"]) rollVal = -2.0 * delta * steerMult;
+        if (keysRef.current["a"] || keysRef.current["arrowleft"]) targetRoll = 2.0 * steerMult;
+        if (keysRef.current["d"] || keysRef.current["arrowright"]) targetRoll = -2.0 * steerMult;
 
-        if (keysRef.current["w"] || keysRef.current["arrowup"]) pitchVal = -1.5 * delta * steerMult;
-        if (keysRef.current["s"] || keysRef.current["arrowdown"]) pitchVal = 1.5 * delta * steerMult;
+        if (keysRef.current["w"] || keysRef.current["arrowup"]) targetPitch = -1.5 * steerMult;
+        if (keysRef.current["s"] || keysRef.current["arrowdown"]) targetPitch = 1.5 * steerMult;
 
-        if (keysRef.current["q"]) yawVal = 1.3 * delta * steerMult;
-        if (keysRef.current["e"]) yawVal = -1.3 * delta * steerMult;
+        if (keysRef.current["q"]) targetYaw = 1.3 * steerMult;
+        if (keysRef.current["e"]) targetYaw = -1.3 * steerMult;
 
         // Mouse assist
-        if (Math.abs(mouseRef.current.x) > 0.05) yawVal += -mouseRef.current.x * 1.4 * delta * steerMult;
-        if (Math.abs(mouseRef.current.y) > 0.05) pitchVal += mouseRef.current.y * 1.4 * delta * steerMult;
+        if (Math.abs(mouseRef.current.x) > 0.05) targetYaw += -mouseRef.current.x * 1.4 * steerMult * mSensitivity;
+        if (Math.abs(mouseRef.current.y) > 0.05) targetPitch += mouseRef.current.y * 1.4 * steerMult * mSensitivity;
 
         // Mobile touch joystick inputs (additive or direct override)
         if (isMobile) {
           if (Math.abs(leftJoystickRef.current.y) > 0.01) {
-            pitchVal += -leftJoystickRef.current.y * 1.85 * delta * steerMult;
+            targetPitch += -leftJoystickRef.current.y * 1.85 * steerMult * sensitivity;
           }
           if (Math.abs(leftJoystickRef.current.x) > 0.01) {
-            yawVal += -leftJoystickRef.current.x * 1.85 * delta * steerMult;
+            targetYaw += -leftJoystickRef.current.x * 1.85 * steerMult * sensitivity;
           }
           if (Math.abs(rightJoystickRef.current.x) > 0.01) {
-            rollVal += -rightJoystickRef.current.x * 2.5 * delta * steerMult;
+            targetRoll += -rightJoystickRef.current.x * 2.5 * steerMult * sensitivity;
           }
 
           // Mobile weapon trigger firing
@@ -2352,6 +2545,16 @@ export const SpaceGame: React.FC = () => {
             }
           }
         }
+
+        // Apply smooth exponential decay interpolation for responsive, silky-smooth steering feel
+        const lerpFactor = 1 - Math.exp(-12 * delta); // 12Hz decay rate for buttery action
+        smoothRoll = THREE.MathUtils.lerp(smoothRoll, targetRoll, lerpFactor);
+        smoothPitch = THREE.MathUtils.lerp(smoothPitch, targetPitch, lerpFactor);
+        smoothYaw = THREE.MathUtils.lerp(smoothYaw, targetYaw, lerpFactor);
+
+        const rollVal = smoothRoll * delta;
+        const pitchVal = smoothPitch * delta;
+        const yawVal = smoothYaw * delta;
 
         const localRoll = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), rollVal);
         const localPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitchVal);
@@ -3030,11 +3233,28 @@ export const SpaceGame: React.FC = () => {
 
       // ---------------- Third person smooth camera follow ----------------
       if ((gameStateRef.current === "Playing" || gameStateRef.current === "Pause") && !statsRef.current.isLanded) {
-        const backVec = new THREE.Vector3(0, 8.5, 38).applyQuaternion(shipGroup.quaternion);
+        const currentSpeed = Math.abs(velocity.z);
+        const maxSpd = statsRef.current.boostSpeed || 60;
+        const speedPct = THREE.MathUtils.clamp(currentSpeed / maxSpd, 0, 1);
+
+        // Dynamic camera pull-back and FOV expansion based on speed percentage
+        const dynamicZ = 38 + speedPct * 11; // pull back further at high speeds
+        const dynamicY = 8.5 + speedPct * 2.2; // raise slightly
+        const targetFOV = 65 + speedPct * 12; // expand field of view for high-speed warping sensation
+
+        camera.fov = THREE.MathUtils.lerp(camera.fov, targetFOV, 1 - Math.exp(-6 * delta));
+        camera.updateProjectionMatrix();
+
+        const backVec = new THREE.Vector3(0, dynamicY, dynamicZ).applyQuaternion(shipGroup.quaternion);
         const targetCam = new THREE.Vector3().copy(shipGroup.position).add(backVec);
 
-        camera.position.lerp(targetCam, 0.08);
-        camera.lookAt(new THREE.Vector3().copy(shipGroup.position).addScaledVector(direction, 20));
+        // Framerate-independent camera lerp for gorgeous, silky smooth lag
+        const camLerpFactor = 1 - Math.exp(-8 * delta); // 8Hz follow rate
+        camera.position.lerp(targetCam, camLerpFactor);
+        
+        // Dynamic target gaze
+        const lookTarget = new THREE.Vector3().copy(shipGroup.position).addScaledVector(direction, 25);
+        camera.lookAt(lookTarget);
       } else if ((gameStateRef.current === "Playing" || gameStateRef.current === "Pause") && statsRef.current.isLanded) {
         // dynamic rotating orbital base camera
         const activePlanet = planetMeshes.find(p => p.id === statsRef.current.currentPlanetId);
@@ -3156,6 +3376,51 @@ export const SpaceGame: React.FC = () => {
           >
             RECOUPLE GRAPHICS ENGINE
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isPortrait) {
+    return (
+      <div className="fixed inset-0 z-[9999] bg-neutral-950 flex flex-col items-center justify-center p-6 text-white text-center select-none font-sans">
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.06)_0%,transparent_100%)] animate-pulse" />
+        
+        <div className="max-w-md w-full p-8 border border-blue-500/15 bg-neutral-900/50 backdrop-blur-xl rounded-lg shadow-2xl flex flex-col items-center space-y-6 text-center">
+          {/* Animated rotation phone icon */}
+          <div className="relative w-20 h-20 flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full border border-blue-500/20 animate-ping opacity-75" style={{ animationDuration: '3s' }} />
+            <div className="absolute inset-0 rounded-full bg-blue-500/5 animate-pulse" />
+            <svg 
+              className="w-12 h-12 text-blue-400 animate-bounce" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor" 
+              strokeWidth="1.5"
+              style={{ animationDuration: '2.5s' }}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-6 15h9" />
+            </svg>
+            <div className="absolute -right-1 top-4 text-blue-500 font-bold animate-pulse text-xs">➔</div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-blue-500 font-mono text-xs uppercase tracking-widest font-extrabold">
+              ⚓ DETECTING DEVICE ROTATION
+            </div>
+            <h1 className="text-2xl font-light tracking-tight text-white uppercase">
+              Landscape Mode <span className="text-blue-400 font-bold">Required</span>
+            </h1>
+            <p className="text-neutral-400 text-sm leading-relaxed">
+              Please rotate your device to landscape orientation. VOIDFLYER requires a wide combat view screen to operate the flight deck.
+            </p>
+          </div>
+
+          <div className="w-full bg-black/40 border border-white/5 rounded p-3.5 text-left font-mono text-[11px] text-neutral-400 flex flex-col gap-1.5">
+            <div className="text-blue-400 font-semibold uppercase tracking-wider">// BRIDGE PROTOCOL:</div>
+            <div>• Toggle <span className="text-white font-medium">Auto-Rotate</span> on in your phone controls.</div>
+            <div>• Turn your phone 90° sideways to unlock cockpit.</div>
+          </div>
         </div>
       </div>
     );
@@ -3284,6 +3549,7 @@ export const SpaceGame: React.FC = () => {
             <div className="pointer-events-auto pb-4 pl-4">
               <VirtualJoystick
                 title="STEER // FLIGHT"
+                size={settings.joystickSize}
                 onMove={(x, y) => {
                   leftJoystickRef.current = { x, y };
                 }}
@@ -3337,6 +3603,7 @@ export const SpaceGame: React.FC = () => {
               {/* Right Virtual Joystick */}
               <VirtualJoystick
                 title="SPIN // ROLL"
+                size={settings.joystickSize}
                 onMove={(x, y) => {
                   rightJoystickRef.current = { x, y };
                 }}
