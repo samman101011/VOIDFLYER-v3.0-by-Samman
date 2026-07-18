@@ -5,6 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    base: '/VOIDFLYER-v3.0-by-Samman/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
