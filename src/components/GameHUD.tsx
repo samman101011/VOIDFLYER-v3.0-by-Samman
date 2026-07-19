@@ -874,11 +874,22 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                   <span className="text-white font-bold bg-white/5 border border-white/10 px-1.5 py-0.5 mr-2">A / D</span> Rotate spaceship sensor view & pan surrounding landscape
                 </div>
 
-                <div className="flex gap-4">
+                <div className="flex flex-wrap gap-3 justify-center md:justify-end">
+                  {/* Option 3: Explore Planet Surface */}
+                  <button
+                    onClick={() => {
+                      audioEngine.playClick();
+                      onUpdateStats({ isExploring: true });
+                    }}
+                    className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 text-xs font-black font-mono tracking-widest uppercase transition-all shadow-[0_0_20px_rgba(16,185,129,0.4)] cursor-pointer rounded-sm active:scale-95 flex items-center gap-2"
+                  >
+                    <Globe className="w-4 h-4 text-neutral-950 animate-pulse" /> EXPLORE SURFACE ON-FOOT
+                  </button>
+
                   {/* Option 1: Access Outpost Hangar Services */}
                   <button
                     onClick={() => { audioEngine.playClick(); setShowOutpostOps(true); }}
-                    className="px-6 py-2.5 bg-neutral-900 hover:bg-neutral-800 border border-white/15 text-white text-xs font-bold font-mono tracking-wider transition-all cursor-pointer rounded-sm"
+                    className="px-5 py-2.5 bg-neutral-900 hover:bg-neutral-800 border border-white/15 text-white text-xs font-bold font-mono tracking-wider transition-all cursor-pointer rounded-sm"
                   >
                     ACCESS OUTPOST OPERATIONS & TRADE
                   </button>
@@ -886,9 +897,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                   {/* Option 2: Launch Spaceship into Space Orbit */}
                   <button
                     onClick={onTakeOff}
-                    className="px-8 py-2.5 bg-blue-500 hover:bg-blue-400 text-neutral-950 text-xs font-black font-mono tracking-widest uppercase transition-all shadow-[0_0_20px_rgba(59,130,246,0.4)] cursor-pointer rounded-sm active:scale-95 flex items-center gap-2"
+                    className="px-6 py-2.5 bg-blue-500 hover:bg-blue-400 text-neutral-950 text-xs font-black font-mono tracking-widest uppercase transition-all shadow-[0_0_20px_rgba(59,130,246,0.4)] cursor-pointer rounded-sm active:scale-95 flex items-center gap-2"
                   >
-                    <Zap className="w-4 h-4 fill-current text-neutral-950 animate-pulse" /> ENGAGE ENGINES / LAUNCH IN ORBIT
+                    <Zap className="w-4 h-4 fill-current text-neutral-950 animate-pulse" /> ENGAGE ENGINES / LAUNCH
                   </button>
                 </div>
               </div>

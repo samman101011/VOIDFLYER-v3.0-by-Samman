@@ -99,6 +99,8 @@ export interface PlayerStats {
   boostSpeed: number;
   isBoosting: boolean;
   isLanded: boolean;
+  isWalking?: boolean;
+  isExploring?: boolean;
   currentPlanetId: string | null;
   landingProgress: number; // 0 to 1
   score: number;

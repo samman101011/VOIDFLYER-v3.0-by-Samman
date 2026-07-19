@@ -4,6 +4,7 @@ import { GameState, PlanetConfig, PlayerStats, GameLog, GameSettings, SolarSyste
 import { GameHUD } from "./GameHUD";
 import { MainMenuScreen } from "./MainMenuScreen";
 import { VirtualJoystick } from "./VirtualJoystick";
+import { PlanetSurface } from "./PlanetSurface";
 import { audioEngine } from "./AudioEngine";
 import { GALAXY_SYSTEMS } from "../data/galaxy";
 import {
@@ -97,6 +98,8 @@ export const SpaceGame: React.FC = () => {
     boostSpeed: 270,
     isBoosting: false,
     isLanded: false,
+    isWalking: false,
+    isExploring: false,
     currentPlanetId: null,
     landingProgress: 0,
     score: 0,
@@ -2729,9 +2732,9 @@ export const SpaceGame: React.FC = () => {
               addLog("STATION APPROACH: Orbital outpost approach vector locked. Press E to dock.", "warning");
             }
             if (keysRef.current["e"] || keysRef.current["keye"]) {
-              setStats((prev) => ({ ...prev, isLanded: true, speed: 0, fuel: prev.maxFuel }));
+              setStats((prev) => ({ ...prev, isExploring: true, isLanded: true }));
               audioEngine.setMusicZone("station");
-              addLog("DOCKING COUPLING ENGAGED: Energy Core instantly restored to 100%! Welcome to Star Outpost Flight Services.", "success");
+              addLog("LANDED: Exploration mode engaged. Press F to return to ship.", "success");
               keysRef.current["e"] = false;
               keysRef.current["keye"] = false;
             }
@@ -2795,6 +2798,11 @@ export const SpaceGame: React.FC = () => {
             nearestPlanetId = item.id;
           }
         });
+
+        // Space flight updates are active if we are not exploring on-foot
+        if (statsRef.current.isExploring) {
+          // Skip updating space physics to freeze space state while exploring
+        }
 
         if (nearestPlanetId && minPlanetDist < 1550) {
           const planetObj = planetMeshes.find(p => p.id === nearestPlanetId);
@@ -3395,7 +3403,9 @@ export const SpaceGame: React.FC = () => {
         camera.lookAt(new THREE.Vector3(focalX, focalY, focalZ));
       }
 
-      renderer.render(scene, camera);
+      if (!statsRef.current.isExploring) {
+        renderer.render(scene, camera);
+      }
     };
 
     animate();
@@ -3544,7 +3554,23 @@ export const SpaceGame: React.FC = () => {
   return (
     <div className="relative w-full h-screen overflow-hidden bg-neutral-950">
       {/* Three.js canvas node */}
-      <div ref={mountRef} className="absolute inset-0 w-full h-full" id="flight_canvas" />
+      <div ref={mountRef} className={`absolute inset-0 w-full h-full ${stats.isExploring ? "hidden pointer-events-none" : ""}`} id="flight_canvas" />
+
+      {/* Surface Exploration Overlay */}
+      {stats.isExploring && (
+        <div className="absolute inset-0 z-40 bg-neutral-950">
+          <PlanetSurface
+            planetConfig={currentSystem.planets.find(p => p.id === stats.currentPlanetId) || currentSystem.planets[0]}
+            onExit={() => {
+              setStats((prev) => ({ ...prev, isExploring: false }));
+              addLog("Boarded starship cockpit. Orbital flight controls re-engaged.", "success");
+              audioEngine.setMusicZone("exploration");
+            }}
+            stats={stats}
+            onUpdateStats={handleUpdateStats}
+          />
+        </div>
+      )}
 
       {/* Interactive HUD Layer */}
       <GameHUD
