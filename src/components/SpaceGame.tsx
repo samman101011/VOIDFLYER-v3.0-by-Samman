@@ -1167,8 +1167,10 @@ export const SpaceGame: React.FC = () => {
 
       const mat = new THREE.MeshStandardMaterial({
         map: planetTexture,
-        roughness: 0.8,
-        metalness: 0.15,
+        roughness: 0.6,
+        metalness: 0.1,
+        emissive: new THREE.Color(config.color),
+        emissiveIntensity: 0.2,
       });
 
       const planetMesh = new THREE.Mesh(geom, mat);
